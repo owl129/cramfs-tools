@@ -65,7 +65,7 @@
 #define FSCK_LIBRARY     128	/* Shared library error */
 
 #define PAD_SIZE 512
-#define PAGE_CACHE_SIZE (4096)
+// #define PAGE_CACHE_SIZE (4096)
 
 static const char *progname = "cramfsck";
 
@@ -77,6 +77,7 @@ static int opt_verbose = 0;	/* 1 = verbose (-v), 2+ = very verbose (-vv) */
 static int opt_extract = 0;		/* extract cramfs (-x) */
 static char *extract_dir = "root";	/* extraction directory (-x) */
 static uid_t euid;			/* effective UID */
+static unsigned int PAGE_CACHE_SIZE = 4096;
 
 /* (cramfs_super + start) <= start_dir < end_dir <= start_data <= end_data */
 static unsigned long start_dir = ~0UL;	/* start of first non-root inode */
@@ -92,7 +93,7 @@ static char read_buffer[ROMBUFFERSIZE * 2];
 static unsigned long read_buffer_block = ~0UL;
 
 /* Uncompressing data structures... */
-static char outbuffer[PAGE_CACHE_SIZE*2];
+static char *outbuffer;
 static z_stream stream;
 
 /* Prototypes */
@@ -104,10 +105,12 @@ static void usage(int status)
 {
 	FILE *stream = status ? stderr : stdout;
 
-	fprintf(stream, "usage: %s [-hv] [-x dir] file\n"
+	fprintf(stream, "usage: %s [-hv] [-x dir] [-p page_cache_size ] file\n"
 		" -h         print this help\n"
 		" -x dir     extract into dir\n"
 		" -v         be more verbose\n"
+		" -p page_cache_size \n"
+		"            set PAGE_CACHE_SIZE. default value is 4096\n"
 		" file       file to test\n", progname);
 
 	exit(status);
@@ -660,12 +663,13 @@ int main(int argc, char **argv)
 	int c;			/* for getopt */
 	int start = 0;
 	size_t length;
+	int psize;
 
 	if (argc)
 		progname = argv[0];
 
 	/* command line options */
-	while ((c = getopt(argc, argv, "hx:v")) != EOF) {
+	while ((c = getopt(argc, argv, "hx:vp:")) != EOF) {
 		switch (c) {
 		case 'h':
 			usage(FSCK_OK);
@@ -680,9 +684,18 @@ int main(int argc, char **argv)
 		case 'v':
 			opt_verbose++;
 			break;
+		case 'p':
+			psize = atoi(optarg);
+			if ( psize < 1024*1024 && psize >0){
+				PAGE_CACHE_SIZE = psize;
+			}else{
+				die(FSCK_ERROR, 0, "page size invalid.");
+			}
+			break;
 		}
 	}
-
+	
+	outbuffer = (char*)malloc(PAGE_CACHE_SIZE*2);
 	if ((argc - optind) != 1)
 		usage(FSCK_USAGE);
 	filename = argv[optind];
